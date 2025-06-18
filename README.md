@@ -34,29 +34,6 @@ Start the application:
 npm start
 ```
 
-## Usage
-
-1. **Upload a CSV File**
-   - Drag and drop a CSV file onto the upload area
-   - Or click the "Choose File" button to select a file
-   - The application will validate that it's a CSV file
-
-2. **Chat with AI**
-   - Once the CSV is uploaded, you can start asking questions about the data
-   - Type your question in the chat input box
-   - Press Enter or click "Send" to get the AI's response
-
-## Project Structure
-
-```
-├── main.js           # Electron main process
-├── renderer.js       # Frontend logic
-├── index.html        # UI structure
-├── styles.css        # Styling
-├── package.json      # Dependencies and scripts
-└── .env             # Environment variables (API key)
-```
-
 ## Technologies Used
 
 - Electron (main framework)
@@ -66,4 +43,4 @@ npm start
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License
