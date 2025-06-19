@@ -15,15 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.addEventListener(eventName, preventDefaults, false);
     });
 
-    // // Highlight drop zone when item is dragged over it
-    // ['dragenter', 'dragover'].forEach(eventName => {
-    //     dropZone.addEventListener(eventName, highlight, false);
-    // });
-
-    // ['dragleave', 'drop'].forEach(eventName => {
-    //     dropZone.addEventListener(eventName, unhighlight, false);
-    // });
-
     // Handle dropped files
     dropZone.addEventListener('drop', handleDrop, false);
 
@@ -34,14 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         e.stopPropagation();
     }
-
-    // function highlight(e) {
-    //     dropZone.classList.add('dragover');
-    // }
-
-    // function unhighlight(e) {
-    //     dropZone.classList.remove('dragover');
-    // }
 
     function handleDrop(e) {
         const dt = e.dataTransfer;
