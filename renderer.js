@@ -15,14 +15,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.addEventListener(eventName, preventDefaults, false);
     });
 
-    // Highlight drop zone when item is dragged over it
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, highlight, false);
-    });
+    // // Highlight drop zone when item is dragged over it
+    // ['dragenter', 'dragover'].forEach(eventName => {
+    //     dropZone.addEventListener(eventName, highlight, false);
+    // });
 
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, unhighlight, false);
-    });
+    // ['dragleave', 'drop'].forEach(eventName => {
+    //     dropZone.addEventListener(eventName, unhighlight, false);
+    // });
 
     // Handle dropped files
     dropZone.addEventListener('drop', handleDrop, false);
@@ -35,13 +35,13 @@ document.addEventListener('DOMContentLoaded', () => {
         e.stopPropagation();
     }
 
-    function highlight(e) {
-        dropZone.classList.add('dragover');
-    }
+    // function highlight(e) {
+    //     dropZone.classList.add('dragover');
+    // }
 
-    function unhighlight(e) {
-        dropZone.classList.remove('dragover');
-    }
+    // function unhighlight(e) {
+    //     dropZone.classList.remove('dragover');
+    // }
 
     function handleDrop(e) {
         const dt = e.dataTransfer;
@@ -58,12 +58,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (files.length > 0) {
             const file = files[0];
             
-            // Check if file is a CSV
-            if (file.name.toLowerCase().endsWith('.csv')) {
+            if (file.name.toLowerCase().endsWith('.csv')) {                   // Check if file is a CSV
                 fileName.textContent = `Selected file: ${file.name}`;
                 fileInfo.classList.add('visible');
-                // Send file path to main process for parsing
-                ipcRenderer.send('parse-csv', file.path);
+                ipcRenderer.send('parse-csv', file.path);                     // Send file path to main process for parsing
             } else {
                 alert('Please select a CSV file');
                 fileInput.value = ''; // Clear the file input
@@ -73,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Listen for parsing result
+    // show parsing result
     ipcRenderer.on('csv-parsed', (event, rowCount) => {
         if (rowCount > 0) {
             fileName.textContent += ` (Parsed ${rowCount} rows)`;
@@ -96,8 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!userMsg) return;
         appendMessage(userMsg, 'user');
         chatInput.value = '';
-        // Send user message to main process
-        ipcRenderer.send('user-message', userMsg);
+        ipcRenderer.send('user-message', userMsg);                     // Send user message to main process
     }
 
     sendBtn.addEventListener('click', sendMessage);
@@ -107,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Listen for AI response
+    // AI response
     ipcRenderer.on('ai-message', (event, aiMsg) => {
         appendMessage(aiMsg, 'ai');
     });

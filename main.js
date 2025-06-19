@@ -41,14 +41,13 @@ ipcMain.on('parse-csv', (event, filePath) => {
     });
 });
 
-// Listen for chat messages from renderer
+// chat messages from renderer
 ipcMain.on('user-message', async (event, userMessage) => {
   try {
-    // Add user message to chat history
-    chatHistory.push({ role: 'user', content: userMessage });
+    chatHistory.push({ role: 'user', content: userMessage });                // add user message to chat history
 
-    // Prepare prompt with CSV data and chat history
-    const csvPreview = JSON.stringify(csvData.slice(0, 10)); // Only send first 10 rows for context
+    // prepare prompt with CSV data and chat history
+    const csvPreview = JSON.stringify(csvData.slice(0, 10));                 // Only send first 10 rows for context
     const systemPrompt = `You are a helpful assistant. The user has uploaded a CSV file. Here are the first 10 rows: ${csvPreview}. Answer questions about this data.`;
     const messages = [
       { role: 'system', content: systemPrompt },
