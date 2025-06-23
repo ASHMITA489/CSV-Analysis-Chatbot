@@ -41,20 +41,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (files.length > 0) {
             const file = files[0];
             
-            if (file.name.toLowerCase().endsWith('.csv')) {                   // Check if file is a CSV
+            if (file.name.toLowerCase().endsWith('.csv')) {
                 fileName.textContent = `Selected file: ${file.name}`;
                 fileInfo.classList.add('visible');
-                ipcRenderer.send('parse-csv', file.path);                     // Send file path to main process for parsing
+                ipcRenderer.send('parse-csv', file.path);
             } else {
                 alert('Please select a CSV file');
-                fileInput.value = ''; // Clear the file input
+                fileInput.value = '';
                 fileName.textContent = '';
                 fileInfo.classList.remove('visible');
             }
         }
     }
 
-    // show parsing result
     ipcRenderer.on('csv-parsed', (event, rowCount) => {
         if (rowCount > 0) {
             fileName.textContent += ` (Parsed ${rowCount} rows)`;
@@ -77,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!userMsg) return;
         appendMessage(userMsg, 'user');
         chatInput.value = '';
-        ipcRenderer.send('user-message', userMsg);                     // Send user message to main process
+        ipcRenderer.send('user-message', userMsg);
     }
 
     sendBtn.addEventListener('click', sendMessage);
