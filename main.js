@@ -6,8 +6,7 @@ require('dotenv').config();
 const { OpenAI } = require('openai');
 
 let csvData = [];
-let chatHistory = [];
-let csvChunks = [];
+let csvSchema = {};
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -26,86 +25,125 @@ function createWindow() {
   win.loadFile('index.html');
 }
 
-// tokens estimation in a chunk of data
-function estimateTokenCount(data) {
-  return JSON.stringify(data).length / 4;                 // roughly 1 token = 4 characters in English
-}
-
-function calculateOptimalChunkSize(data) {
-  const MAX_TOKENS_PER_CHUNK = 2000; 
-  const MIN_CHUNKS = 3; 
-  const MAX_CHUNKS = 50; 
-  
-  const totalRows = data.length;
-  if (totalRows === 0) return 1;
-  
-  const sampleSize = Math.min(50, totalRows);
-  const sample = data.slice(0, sampleSize);
-  const avgTokensPerRow = estimateTokenCount(sample) / sampleSize;
-  
-  const rowsPerChunk = Math.floor(MAX_TOKENS_PER_CHUNK / avgTokensPerRow);
-  
-  const idealNumChunks = Math.ceil(totalRows / rowsPerChunk);                           // no. of chunks needed
-  
-  const finalNumChunks = Math.max(MIN_CHUNKS, Math.min(MAX_CHUNKS, idealNumChunks));
-  
-  const chunkSize = Math.ceil(totalRows / finalNumChunks);                             // final chunk size
-  
-  return chunkSize;
-}
-
-// Create chunks of CSV data
-function createCsvChunks(data) {
-  const chunkSize = calculateOptimalChunkSize(data);
-  const chunks = [];
-  
-  for(let i = 0; i < data.length; i += chunkSize) {
-    const chunk = data.slice(i, i + chunkSize);
-    chunks.push({
-      id: `chunk_${i/chunkSize}`,
-      startRow: i,
-      endRow: Math.min(i + chunkSize - 1, data.length - 1),
-      data: chunk,
-      estimatedTokens: Math.round(estimateTokenCount(chunk))
-    });
+// --- Schema Extraction ---
+function inferType(values) {
+  let numCount = 0, boolCount = 0, dateCount = 0, total = values.length;
+  for (const val of values) {
+    if (val === '' || val === null || val === undefined) continue;
+    if (!isNaN(Number(val)) && val.trim() !== '') numCount++;
+    if (typeof val === 'string' && (val.toLowerCase() === 'true' || val.toLowerCase() === 'false')) boolCount++;
+    if (!isNaN(Date.parse(val))) dateCount++;
   }
-  
-  return chunks;
+  if (numCount / total > 0.8) return 'number';
+  if (boolCount / total > 0.8) return 'boolean';
+  if (dateCount / total > 0.8) return 'date';
+  return 'string';
 }
 
-// find relevant chunks based on user question
-function findRelevantChunks(userQuestion, chunks) {
-  const question = userQuestion.toLowerCase();
-  const relevantChunks = [];
-  
-  chunks.forEach(chunk => {
-    let score = 0;
-    const chunkContent = JSON.stringify(chunk.data).toLowerCase();
-    
-    // keyword matching
-    question.split(' ').forEach(word => {
-      if(word.length > 3 && chunkContent.includes(word)) {
-        score += 1;
-      }
-    });
-    
-    if(score > 0) {
-      relevantChunks.push({ ...chunk, score});
+function extractSchema(data, sampleSize = 20) {
+  if (!data || data.length === 0) return { columns: [], columnTypes: {} };
+  const columns = Object.keys(data[0]);
+  const columnTypes = {};
+  for (const col of columns) {
+    const values = data.slice(0, sampleSize).map(row => row[col]);
+    columnTypes[col] = inferType(values);
+  }
+  return { columns, columnTypes };
+}
+
+// --- LLM Prompt Builder ---
+function buildLLMPrompt(schema, userQuestion, dataSample) {
+  const { columns, columnTypes } = schema;
+  const schemaDescription = columns.map(col => `${col}: ${columnTypes[col]}`).join(', ');
+  const sampleRows = JSON.stringify(dataSample, null, 2);
+
+  return `
+You are a JavaScript developer. You are given a CSV file parsed as an array of objects called data, where each object represents a row.
+
+The schema of the data is:
+${schemaDescription}
+
+Here are some sample rows:
+${sampleRows}
+
+Write ONLY a JavaScript function named 'answer' that takes the array 'data' as input and returns the answer to the following question:
+
+"${userQuestion}"
+
+IMPORTANT: 
+- Use only the columns and types shown in the schema and sample.
+- Output ONLY the JavaScript function code
+- Do not include any explanations, comments, or markdown formatting
+- Do not include \`\`\`javascript or \`\`\` blocks
+- Start directly with 'function answer(data) {'
+- End with the closing brace '}'
+- Your function MUST use a 'return' statement to return the answer.
+- If the answer cannot be computed, return a string explaining why.
+- Do NOT use console.log or print, only return the answer.
+- The function should answer the question directly.
+- Example: function answer(data) { return data.length; }
+- If you are unsure, return a string explaining why.
+`;
+}
+
+// --- Code Extraction ---
+function extractCodeFromResponse(response) {
+  // Remove markdown code blocks if present
+  let code = response.replace(/```javascript\s*/g, '').replace(/```\s*/g, '');
+  // Find the function answer(data) { ... } pattern
+  const functionMatch = code.match(/function\s+answer\s*\(\s*data\s*\)\s*\{[\s\S]*\}/);
+  if (functionMatch) {
+    return functionMatch[0];
+  }
+  // If no function found, try to extract just the function body
+  const bodyMatch = code.match(/\{[\s\S]*\}/);
+  if (bodyMatch) {
+    return `function answer(data) ${bodyMatch[0]}`;
+  }
+  // If still no match, try to wrap the entire response in a function
+  if (code.trim()) {
+    return `function answer(data) {\n${code}\n}`;
+  }
+  // If still no match, return the cleaned response
+  return code.trim();
+}
+
+// --- Safe Code Execution ---
+function runCodeSafely(code, data) {
+  const cleanCode = extractCodeFromResponse(code);
+  const sanitizedCode = cleanCode
+    .replace(/require\(/g, '// require(')
+    .replace(/import\(/g, '// import(')
+    .replace(/process\./g, '// process.')
+    .replace(/global\./g, '// global.')
+    .replace(/__dirname/g, '// __dirname')
+    .replace(/__filename/g, '// __filename')
+    .replace(/fs\./g, '// fs.')
+    .replace(/child_process/g, '// child_process')
+    .replace(/exec\(/g, '// exec(')
+    .replace(/spawn\(/g, '// spawn(')
+    .replace(/eval\(/g, '// eval(')
+    .replace(/Function\(/g, '// Function(');
+
+  let result;
+  try {
+    result = eval(`(() => {\n${sanitizedCode}\nreturn answer(data);\n})()`);
+    if (result === undefined) {
+      return `The function did not return a value. Please check the generated code below for debugging.\n\nGenerated code was:\n${cleanCode}`;
     }
-  });
-  
-  // sort by relevance score and return top 3 most relevant chunks
-  return relevantChunks
-    .sort((a,b) => b.score - a.score)
-    .slice(0,3);
+    if (typeof result === 'object') {
+      return JSON.stringify(result, null, 2);
+    }
+    return String(result);
+  } catch (err) {
+    return `Error executing code: ${err.message}\n\nGenerated code was:\n${cleanCode}`;
+  }
 }
 
-// CSV file path from renderer
+// --- CSV Parsing and Schema Extraction ---
 ipcMain.on('parse-csv', async (event, filePath) => {
   try {
     csvData = [];
-    
-    // load csv data
     await new Promise((resolve, reject) => {
       fs.createReadStream(filePath)
         .pipe(csv())
@@ -115,9 +153,9 @@ ipcMain.on('parse-csv', async (event, filePath) => {
         .on('end', resolve)
         .on('error', reject);
     });
-    
-    csvChunks = createCsvChunks(csvData);
-    
+    // Extract schema after parsing
+    csvSchema = extractSchema(csvData);
+    console.log('Extracted schema:', csvSchema);
     event.reply('csv-parsed', csvData.length);
   } catch (err) {
     console.error('Error parsing CSV:', err);
@@ -125,42 +163,24 @@ ipcMain.on('parse-csv', async (event, filePath) => {
   }
 });
 
-// chat messages from renderer
+// --- Chat Handler ---
 ipcMain.on('user-message', async (event, userMessage) => {
   try {
-    chatHistory.push({ role: 'user', content: userMessage });                       // add user message to chat history
-    
-    const relevantChunks = findRelevantChunks(userMessage, csvChunks);
-    
-    let contextPrompt = `You are analyzing a CSV file with ${csvData.length} rows. Based on the question, here is the relevant data:\n\n`;
-    
-    if(relevantChunks.length > 0) {
-      relevantChunks.forEach((chunk, index) => {
-        contextPrompt += `Data Sample ${index + 1}:\n${JSON.stringify(chunk.data, null, 2)}\n\n`;
-      });
-    } else {
-      contextPrompt += `Sample data (first 10 rows):\n${JSON.stringify(csvData.slice(0,10), null, 2)}`;
-    }
-    
-    const messages = [
-      { role: 'system', content: contextPrompt },
-      ...chatHistory
-    ];
-    
-    // Call OpenAI API
+    // Build the prompt for the LLM using schema and a data sample
+    const prompt = buildLLMPrompt(csvSchema, userMessage, csvData.slice(0, 3));
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',  
-      messages
+      model: 'gpt-4o',
+      messages: [{ role: 'system', content: prompt }],
+      max_tokens: 800
     });
-    const aiResponse = completion.choices[0].message.content;
-    
-    // Add AI response to chat history
-    chatHistory.push({ role: 'assistant', content: aiResponse });
-    
-    // Send response back to renderer
-    event.reply('ai-message', aiResponse);
+
+    const code = completion.choices[0].message.content.trim();
+    const result = runCodeSafely(code, csvData);
+    event.reply('ai-message', result);
+
   } catch (err) {
-    event.reply('ai-message', 'Sorry, there was an error.');
+    console.error('Error in chat processing:', err);
+    event.reply('ai-message', 'Sorry, there was an error processing your request.');
   }
 });
 
