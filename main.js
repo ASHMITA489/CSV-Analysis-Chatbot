@@ -25,7 +25,7 @@ function createWindow() {
   win.loadFile('index.html');
 }
 
-// --- Schema Extraction ---
+// schema extraction
 function inferType(values) {
   let numCount = 0, boolCount = 0, dateCount = 0, total = values.length;
   for (const val of values) {
@@ -51,7 +51,7 @@ function extractSchema(data, sampleSize = 20) {
   return { columns, columnTypes };
 }
 
-// --- LLM Prompt Builder ---
+// LLM prompt builder
 function buildLLMPrompt(schema, userQuestion, dataSample) {
   const { columns, columnTypes } = schema;
   const schemaDescription = columns.map(col => `${col}: ${columnTypes[col]}`).join(', ');
@@ -86,7 +86,7 @@ IMPORTANT:
 `;
 }
 
-// --- Code Extraction ---
+// code extraction
 function extractCodeFromResponse(response) {
   // Remove markdown code blocks if present
   let code = response.replace(/```javascript\s*/g, '').replace(/```\s*/g, '');
@@ -108,7 +108,6 @@ function extractCodeFromResponse(response) {
   return code.trim();
 }
 
-// --- Safe Code Execution ---
 function runCodeSafely(code, data) {
   const cleanCode = extractCodeFromResponse(code);
   const sanitizedCode = cleanCode
@@ -140,7 +139,7 @@ function runCodeSafely(code, data) {
   }
 }
 
-// --- CSV Parsing and Schema Extraction ---
+// csv parsing and schema extraction
 ipcMain.on('parse-csv', async (event, filePath) => {
   try {
     csvData = [];
@@ -163,15 +162,14 @@ ipcMain.on('parse-csv', async (event, filePath) => {
   }
 });
 
-// --- Chat Handler ---
+// chat processing
 ipcMain.on('user-message', async (event, userMessage) => {
   try {
     // Build the prompt for the LLM using schema and a data sample
     const prompt = buildLLMPrompt(csvSchema, userMessage, csvData.slice(0, 3));
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
-      messages: [{ role: 'system', content: prompt }],
-      max_tokens: 800
+      messages: [{ role: 'system', content: prompt }]
     });
 
     const code = completion.choices[0].message.content.trim();
@@ -180,7 +178,7 @@ ipcMain.on('user-message', async (event, userMessage) => {
 
   } catch (err) {
     console.error('Error in chat processing:', err);
-    event.reply('ai-message', 'Sorry, there was an error processing your request.');
+    event.reply('ai-message', 'Sorry, there was an error.');
   }
 });
 
